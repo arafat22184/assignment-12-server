@@ -32,6 +32,7 @@ async function run() {
 
     const fitForge = client.db("fitForge");
     const usersCollections = fitForge.collection("users");
+    const newslettersCollections = fitForge.collection("newsletters");
 
     // Get Users
     app.get("/users", async (req, res) => {
@@ -155,6 +156,27 @@ async function run() {
         console.error("Google User insert error:", err);
         res.status(500).json({ error: "Failed to handle Google login." });
       }
+    });
+
+    // NewsLetter post
+    app.post("/newsletter", async (req, res) => {
+      const { name, email } = req.body;
+      const userData = {
+        name,
+        email,
+        subscribedAt: new Date(),
+      };
+
+      const existingUser = await newslettersCollections.findOne({ email });
+
+      if (existingUser) {
+        return res.status(409).json({
+          message: "User already subscribed",
+        });
+      }
+
+      const result = await newslettersCollections.insertOne(userData);
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
