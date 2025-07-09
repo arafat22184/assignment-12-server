@@ -103,7 +103,7 @@ async function run() {
           },
         };
 
-        const result = await usersCollection.updateOne(filter, updateDoc);
+        const result = await usersCollections.updateOne(filter, updateDoc);
 
         if (result.modifiedCount === 1) {
           res
