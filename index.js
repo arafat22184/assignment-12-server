@@ -1,5 +1,5 @@
 const express = require("express");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const cors = require("cors");
 const port = process.env.PORT || 3000;
@@ -33,6 +33,7 @@ async function run() {
     const fitForge = client.db("fitForge");
     const usersCollection = fitForge.collection("users");
     const newslettersCollection = fitForge.collection("newsletters");
+    const classesCollection = fitForge.collection("classes");
 
     // Get Users
     app.get("/users", async (req, res) => {
@@ -40,13 +41,58 @@ async function run() {
       res.send(result);
     });
 
-    // Get All Trainer
-    app.get("/users/trainer", async (req, res) => {
+    // Get All Trainer users
+    app.get("/users/trainers", async (req, res) => {
       const result = await usersCollection
         .find({ role: "trainer" })
         .sort({ createdAt: -1 })
         .toArray();
       res.send(result);
+    });
+
+    // Demote trainer to member
+    app.patch("/users/remove-trainer/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        // 1. Verify the user exists and is a trainer
+        const trainer = await usersCollection.findOne({
+          _id: new ObjectId(id),
+          role: "trainer",
+        });
+
+        if (!trainer) {
+          return res.status(404).json({
+            success: false,
+            message: "Trainer not found or already demoted",
+          });
+        }
+
+        // 2. Update the user's role to 'member'
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role: "member" } }
+        );
+
+        if (result.modifiedCount === 1) {
+          res.status(200).json({
+            success: true,
+            message: `${trainer.name} has been demoted to member`,
+          });
+        } else {
+          res.status(400).json({
+            success: false,
+            message: "Failed to demote trainer",
+          });
+        }
+      } catch (error) {
+        console.error("Error demoting trainer:", error);
+        res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: error.message,
+        });
+      }
     });
 
     // GET: Get user role by email
