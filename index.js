@@ -32,7 +32,7 @@ async function run() {
 
     const fitForge = client.db("fitForge");
     const usersCollection = fitForge.collection("users");
-    const newslettersCollections = fitForge.collection("newsletters");
+    const newslettersCollection = fitForge.collection("newsletters");
 
     // Get Users
     app.get("/users", async (req, res) => {
@@ -179,6 +179,12 @@ async function run() {
       }
     });
 
+    // NewsLetter Get
+    app.get("/newsletter", async (req, res) => {
+      const result = await newslettersCollection.find().toArray();
+      res.send(result);
+    });
+
     // NewsLetter post
     app.post("/newsletter", async (req, res) => {
       const { name, email } = req.body;
@@ -188,7 +194,7 @@ async function run() {
         subscribedAt: new Date(),
       };
 
-      const existingUser = await newslettersCollections.findOne({ email });
+      const existingUser = await newslettersCollection.findOne({ email });
 
       if (existingUser) {
         return res.status(409).json({
@@ -196,7 +202,7 @@ async function run() {
         });
       }
 
-      const result = await newslettersCollections.insertOne(userData);
+      const result = await newslettersCollection.insertOne(userData);
       res.send(result);
     });
 
