@@ -40,6 +40,15 @@ async function run() {
       res.send(result);
     });
 
+    // Get All Trainer
+    app.get("/users/trainer", async (req, res) => {
+      const result = await usersCollection
+        .find({ role: "trainer" })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(result);
+    });
+
     // GET: Get user role by email
     app.get("/users/:email/role", async (req, res) => {
       try {
