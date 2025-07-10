@@ -261,6 +261,108 @@ async function run() {
       res.send(result);
     });
 
+    // POST: Create a new fitness class with image upload
+    app.post("/classes", upload.single("image"), async (req, res) => {
+      try {
+        // Validate required fields
+        const requiredFields = [
+          "className",
+          "instructorName",
+          "description",
+          "difficultyLevel",
+          "createdBy",
+          "createdByName",
+        ];
+
+        for (const field of requiredFields) {
+          if (!req.body[field]) {
+            return res.status(400).json({
+              success: false,
+              message: `${field} is required`,
+            });
+          }
+        }
+
+        // Check if image was uploaded
+        if (!req.file) {
+          return res.status(400).json({
+            success: false,
+            message: "Class image is required",
+          });
+        }
+
+        // Parse schedule data
+        let schedule;
+        try {
+          schedule = JSON.parse(req.body.schedule);
+          if (!schedule.days || schedule.days.length === 0) {
+            throw new Error("At least one day must be selected");
+          }
+        } catch (err) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid schedule data",
+          });
+        }
+
+        // Upload image to Cloudinary
+        const streamUpload = () =>
+          new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              {
+                folder: "fitForge/classes",
+                transformation: { width: 800, height: 600, crop: "limit" },
+              },
+              (error, result) => {
+                if (result) resolve(result);
+                else reject(error);
+              }
+            );
+            streamifier.createReadStream(req.file.buffer).pipe(stream);
+          });
+
+        const cloudinaryResult = await streamUpload();
+
+        // Create class document
+        const newClass = {
+          className: req.body.className,
+          instructorName: req.body.instructorName,
+          schedule: schedule, // Store the structured schedule data
+          description: req.body.description,
+          difficultyLevel: req.body.difficultyLevel,
+          equipmentNeeded: req.body.equipmentNeeded || null,
+          imageUrl: cloudinaryResult.secure_url,
+          imagePublicId: cloudinaryResult.public_id,
+          createdBy: req.body.createdBy,
+          createdByName: req.body.createdByName,
+          createdAt: new Date(),
+          status: "active",
+          membersEnrolled: [],
+          averageRating: 0,
+          totalReviews: 0,
+        };
+
+        // Insert into MongoDB
+        const result = await classesCollection.insertOne(newClass);
+
+        res.status(201).json({
+          success: true,
+          message: "Class created successfully",
+          data: {
+            insertedId: result.insertedId,
+            imageUrl: newClass.imageUrl,
+          },
+        });
+      } catch (error) {
+        console.error("Error creating class:", error);
+        res.status(500).json({
+          success: false,
+          message: "Failed to create class",
+          error: error.message,
+        });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
