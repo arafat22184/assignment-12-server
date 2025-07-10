@@ -31,13 +31,34 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
 
     const fitForge = client.db("fitForge");
-    const usersCollections = fitForge.collection("users");
+    const usersCollection = fitForge.collection("users");
     const newslettersCollections = fitForge.collection("newsletters");
 
     // Get Users
     app.get("/users", async (req, res) => {
-      const result = await usersCollections.find().toArray();
+      const result = await usersCollection.find().toArray();
       res.send(result);
+    });
+
+    // GET: Get user role by email
+    app.get("/users/:email/role", async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        if (!email) {
+          return res.status(400).send({ message: "Email is required" });
+        }
+
+        const user = await usersCollection.findOne({ email });
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send({ role: user.role || "member" });
+      } catch (error) {
+        res.status(500).send({ message: "Failed to get role" });
+      }
     });
 
     // Email Register User store
@@ -77,7 +98,7 @@ async function run() {
           lastLogin: new Date(),
         };
 
-        const result = await usersCollections.insertOne(userData);
+        const result = await usersCollection.insertOne(userData);
         result.finalImageUrl = finalImageUrl;
         res.send(result);
       } catch (err) {
@@ -104,7 +125,7 @@ async function run() {
           },
         };
 
-        const result = await usersCollections.updateOne(filter, updateDoc);
+        const result = await usersCollection.updateOne(filter, updateDoc);
 
         if (result.modifiedCount === 1) {
           res
@@ -126,11 +147,11 @@ async function run() {
       try {
         const { email, name, photoURL } = req.body;
 
-        const existingUser = await usersCollections.findOne({ email });
+        const existingUser = await usersCollection.findOne({ email });
 
         if (existingUser) {
           // Update the lastLogin timestamp
-          const updateResult = await usersCollections.updateOne(
+          const updateResult = await usersCollection.updateOne(
             { email },
             { $set: { lastLogin: new Date() } }
           );
@@ -150,7 +171,7 @@ async function run() {
           lastLogin: new Date(),
         };
 
-        const result = await usersCollections.insertOne(userData);
+        const result = await usersCollection.insertOne(userData);
         res.status(201).json({ message: "User created", result });
       } catch (err) {
         console.error("Google User insert error:", err);
