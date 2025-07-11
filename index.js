@@ -50,6 +50,37 @@ async function run() {
       res.send(result);
     });
 
+    // Get Trainers with skills matching a specific class
+    app.get("/users/trainers/for-class/:classId", async (req, res) => {
+      try {
+        const { classId } = req.params;
+
+        // 1. Get the class to find its skills
+        const classItem = await classesCollection.findOne({
+          _id: new ObjectId(classId),
+          status: "active",
+        });
+
+        if (!classItem) {
+          return res.status(404).send({ message: "Class not found" });
+        }
+
+        // 2. Find trainers whose skills match at least one of the class skills
+        const trainers = await usersCollection
+          .find({
+            role: "trainer",
+            skills: { $in: classItem.skills },
+          })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.send(trainers);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to fetch trainers" });
+      }
+    });
+
     // Demote trainer to member
     app.patch("/users/remove-trainer/:id", async (req, res) => {
       try {
