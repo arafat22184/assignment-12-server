@@ -56,11 +56,121 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users/:email", async (req, res) => {
-      const { email } = req.params;
-      const query = { email };
-      const result = await usersCollection.findOne(query);
-      res.send(result);
+    // Get All Trainer Applications
+    app.get("/users/trainer-applications", async (req, res) => {
+      try {
+        const applications = await usersCollection
+          .find({
+            "trainerApplication.status": "pending",
+          })
+          .toArray();
+        res.status(200).json(applications);
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch trainer applications",
+          error: error.message,
+        });
+      }
+    });
+
+    // Approved Trainer update
+    app.patch("/users/approve-trainer/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id), "trainerApplication.status": "pending" },
+          {
+            $set: {
+              role: "trainer",
+              "trainerApplication.status": "approved",
+              "trainerApplication.updatedAt": new Date(),
+            },
+          }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Application not found or already processed",
+          });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: "Trainer application approved successfully",
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to approve trainer application",
+          error: error.message,
+        });
+      }
+    });
+
+    // Rejected Trainer Update
+    app.patch("/users/reject-trainer/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { feedback } = req.body;
+
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id), "trainerApplication.status": "pending" },
+          {
+            $set: {
+              "trainerApplication.status": "rejected",
+              "trainerApplication.feedback": feedback,
+              "trainerApplication.updatedAt": new Date(),
+            },
+          }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Application not found or already processed",
+          });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: "Trainer application rejected successfully",
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to reject trainer application",
+          error: error.message,
+        });
+      }
+    });
+
+    // Get Applied Trainer details
+    app.get("/users/trainer-application/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const application = await usersCollection.findOne({
+          _id: new ObjectId(id),
+          "trainerApplication.status": "pending",
+        });
+
+        if (!application) {
+          return res.status(404).json({
+            success: false,
+            message: "Application not found",
+          });
+        }
+
+        res.status(200).json(application);
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch application details",
+          error: error.message,
+        });
+      }
     });
 
     app.get("/trainer/:id", async (req, res) => {
@@ -101,10 +211,46 @@ async function run() {
       }
     });
 
-    // Demote trainer to member
+    //Delete trainer application
+    app.patch("/users/delete-trainer-application/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+
+        const result = await usersCollection.updateOne(
+          { email },
+          { $unset: { trainerApplication: "" } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "User not found or no application to delete",
+          });
+        }
+
+        // Optionally return the updated user
+        const updatedUser = await usersCollection.findOne({ email });
+        res.status(200).json({
+          success: true,
+          message: "Trainer application deleted successfully",
+          data: updatedUser,
+        });
+      } catch (error) {
+        console.error("Error deleting trainer application:", error);
+        res.status(500).json({
+          success: false,
+          message: "Failed to delete trainer application",
+          error: error.message,
+        });
+      }
+    });
+
+    // Demote API with application status update
     app.patch("/users/remove-trainer/:id", async (req, res) => {
       try {
         const { id } = req.params;
+        const feedback =
+          "Your trainer status has been removed. You may reapply to become a trainer.";
 
         // 1. Verify the user exists and is a trainer
         const trainer = await usersCollection.findOne({
@@ -119,16 +265,24 @@ async function run() {
           });
         }
 
-        // 2. Update the user's role to 'member'
+        // 2. Update both the role and application status in a single operation
         const result = await usersCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { role: "member" } }
+          {
+            $set: {
+              role: "member",
+              "trainerApplication.status": "rejected",
+              "trainerApplication.feedback": feedback,
+              "trainerApplication.updatedAt": new Date(),
+            },
+          }
         );
 
         if (result.modifiedCount === 1) {
           res.status(200).json({
             success: true,
             message: `${trainer.name} has been demoted to member`,
+            feedback: feedback,
           });
         } else {
           res.status(400).json({
@@ -313,6 +467,13 @@ async function run() {
         }
       }
     );
+
+    app.get("/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      res.send(result);
+    });
 
     // Email Login User Login Time Update
     app.patch("/users/:email", async (req, res) => {
