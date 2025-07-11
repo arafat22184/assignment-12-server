@@ -13,7 +13,13 @@ const streamifier = require("streamifier");
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+    credentials: true,
+  })
+);
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ydu4ilk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -47,6 +53,20 @@ async function run() {
         .find({ role: "trainer" })
         .sort({ createdAt: -1 })
         .toArray();
+      res.send(result);
+    });
+
+    app.get("/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.get("/trainer/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await usersCollection.findOne(query);
       res.send(result);
     });
 
@@ -191,6 +211,108 @@ async function run() {
         res.status(500).json({ error: "User upload failed." });
       }
     });
+
+    // Update user to become a trainer
+    app.patch(
+      "/users/become-trainer",
+      upload.single("imageFile"),
+      async (req, res) => {
+        try {
+          const {
+            email,
+            name,
+            age,
+            experience,
+            certifications,
+            skills,
+            availableDays,
+            availableTimeSlots,
+          } = req.body;
+
+          // Validate required fields
+          if (
+            !email ||
+            !name ||
+            !age ||
+            !experience ||
+            !certifications ||
+            !skills ||
+            !availableDays ||
+            !availableTimeSlots
+          ) {
+            return res.status(400).json({
+              success: false,
+              message: "All required fields must be provided",
+            });
+          }
+
+          let updateData = {
+            trainerApplication: {
+              name,
+              age: parseInt(age),
+              experience,
+              certifications,
+              skills: JSON.parse(skills),
+              availableDays: JSON.parse(availableDays),
+              availableTimeSlots: JSON.parse(availableTimeSlots),
+              status: "pending",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+            role: "member",
+          };
+
+          // Handle image upload if new image was provided
+          if (req.file) {
+            const streamUpload = () =>
+              new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                  { folder: "fitForge/trainers" },
+                  (error, result) => {
+                    if (result) resolve(result);
+                    else reject(error);
+                  }
+                );
+                streamifier.createReadStream(req.file.buffer).pipe(stream);
+              });
+
+            const imageResult = await streamUpload();
+
+            // Update both the user's photo and the application photo
+            updateData.photoURL = imageResult.secure_url;
+            updateData.photoPublicId = imageResult.public_id;
+            updateData.trainerApplication.profileImage = imageResult.secure_url;
+            updateData.trainerApplication.profileImageId =
+              imageResult.public_id;
+          }
+
+          // Update user in database
+          const result = await usersCollection.updateOne(
+            { email },
+            { $set: updateData }
+          );
+
+          if (result.modifiedCount === 0) {
+            return res.status(404).json({
+              success: false,
+              message: "User not found or no changes made",
+            });
+          }
+
+          res.status(200).json({
+            success: true,
+            message: "Trainer application submitted successfully",
+          });
+        } catch (error) {
+          console.error("Error submitting trainer application:", error);
+          res.status(500).json({
+            success: false,
+            message: "Failed to submit trainer application",
+            error: error.message,
+          });
+        }
+      }
+    );
 
     // Email Login User Login Time Update
     app.patch("/users/:email", async (req, res) => {
