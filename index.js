@@ -261,6 +261,75 @@ async function run() {
       res.send(result);
     });
 
+    // GET: Get all classes (for filter options)
+    app.get("/classes/all", async (req, res) => {
+      try {
+        const classes = await classesCollection
+          .find({ status: "active" })
+          .toArray();
+        res.status(200).json(classes);
+      } catch (error) {
+        console.error("Error fetching all classes:", error);
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch classes",
+        });
+      }
+    });
+
+    // GET: 6 class and Search Functionalities implemented
+    app.get("/classes", async (req, res) => {
+      try {
+        const { search, page = 1, limit = 6, difficulty, skill } = req.query;
+        const skip = (page - 1) * limit;
+
+        // Build query object
+        const query = {
+          status: "active",
+        };
+
+        // Add search filter
+        if (search) {
+          query.className = { $regex: search, $options: "i" };
+        }
+
+        // Add difficulty filter
+        if (difficulty) {
+          query.difficultyLevel = difficulty;
+        }
+
+        // Add skill filter
+        if (skill) {
+          query.skills = skill;
+        }
+
+        const [classes, total] = await Promise.all([
+          classesCollection
+            .find(query)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .toArray(),
+          classesCollection.countDocuments(query),
+        ]);
+
+        res.status(200).json({
+          success: true,
+          data: classes,
+          pagination: {
+            total,
+            page: parseInt(page),
+            pages: Math.ceil(total / limit),
+          },
+        });
+      } catch (error) {
+        console.error("Error fetching classes:", error);
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch classes",
+        });
+      }
+    });
+
     // POST: Create a new fitness class with image upload
     app.post("/classes", upload.single("image"), async (req, res) => {
       try {
