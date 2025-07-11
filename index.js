@@ -267,7 +267,6 @@ async function run() {
         // Validate required fields
         const requiredFields = [
           "className",
-          "instructorName",
           "description",
           "difficultyLevel",
           "createdBy",
@@ -291,17 +290,24 @@ async function run() {
           });
         }
 
-        // Parse schedule data
-        let schedule;
-        try {
-          schedule = JSON.parse(req.body.schedule);
-          if (!schedule.days || schedule.days.length === 0) {
-            throw new Error("At least one day must be selected");
+        // Parse skills data
+        let skills = [];
+        if (req.body.skills) {
+          try {
+            skills = JSON.parse(req.body.skills);
+            if (!Array.isArray(skills) || skills.length === 0) {
+              throw new Error("At least one skill must be selected");
+            }
+          } catch (err) {
+            return res.status(400).json({
+              success: false,
+              message: "Invalid skills data or no skills selected",
+            });
           }
-        } catch (err) {
+        } else {
           return res.status(400).json({
             success: false,
-            message: "Invalid schedule data",
+            message: "Skills are required",
           });
         }
 
@@ -326,8 +332,7 @@ async function run() {
         // Create class document
         const newClass = {
           className: req.body.className,
-          instructorName: req.body.instructorName,
-          schedule: schedule, // Store the structured schedule data
+          skills: skills,
           description: req.body.description,
           difficultyLevel: req.body.difficultyLevel,
           equipmentNeeded: req.body.equipmentNeeded || null,
@@ -354,7 +359,6 @@ async function run() {
           },
         });
       } catch (error) {
-        console.error("Error creating class:", error);
         res.status(500).json({
           success: false,
           message: "Failed to create class",
