@@ -381,6 +381,9 @@ async function run() {
             skills,
             availableDays,
             availableTimeSlots,
+            facebook,
+            instagram,
+            linkedin,
           } = req.body;
 
           // Validate required fields
@@ -415,6 +418,17 @@ async function run() {
             },
             role: "member",
           };
+
+          // Add social media links if provided
+          if (facebook) {
+            updateData.trainerApplication.facebook = facebook;
+          }
+          if (instagram) {
+            updateData.trainerApplication.instagram = instagram;
+          }
+          if (linkedin) {
+            updateData.trainerApplication.linkedin = linkedin;
+          }
 
           // Handle image upload if new image was provided
           if (req.file) {
