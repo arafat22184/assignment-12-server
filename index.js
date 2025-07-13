@@ -354,8 +354,11 @@ async function run() {
           email,
           photoURL: finalImageUrl,
           role: "member",
-          createdAt: new Date(),
-          lastLogin: new Date(),
+          activityLog: {
+            createdAt: new Date(),
+            lastLogin: new Date(),
+            paymentHistory: [],
+          },
         };
 
         const result = await usersCollection.insertOne(userData);
@@ -482,6 +485,7 @@ async function run() {
       }
     );
 
+    // get user by email
     app.get("/users/:email", async (req, res) => {
       const { email } = req.params;
       const query = { email };
@@ -504,7 +508,7 @@ async function run() {
         const filter = { email: email };
         const updateDoc = {
           $set: {
-            lastLogin: new Date(lastLogin),
+            "activityLog.lastLogin": new Date(lastLogin),
           },
         };
 
@@ -536,7 +540,11 @@ async function run() {
           // Update the lastLogin timestamp
           const updateResult = await usersCollection.updateOne(
             { email },
-            { $set: { lastLogin: new Date() } }
+            {
+              $set: {
+                "activityLog.lastLogin": new Date(),
+              },
+            }
           );
 
           return res.status(200).json({
@@ -550,8 +558,11 @@ async function run() {
           email,
           photoURL,
           role: "member",
-          createdAt: new Date(),
-          lastLogin: new Date(),
+          activityLog: {
+            createdAt: new Date(),
+            lastLogin: new Date(),
+            paymentHistory: [],
+          },
         };
 
         const result = await usersCollection.insertOne(userData);
@@ -762,6 +773,23 @@ async function run() {
           error: error.message,
         });
       }
+    });
+
+    // Update user with trainer book
+    app.patch("/users/activity/:email", async (req, res) => {
+      const { email } = req.params;
+      const paymentData = req.body;
+      paymentData._id = new ObjectId();
+      console.log("payment data:", paymentData);
+      console.log("userEmail:", email);
+
+      const filter = { email };
+      const result = await usersCollection.updateOne(filter, {
+        $push: {
+          "activityLog.paymentHistory": paymentData,
+        },
+      });
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
