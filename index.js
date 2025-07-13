@@ -900,6 +900,45 @@ async function run() {
       }
     });
 
+    app.get("/admin/payment-summary", async (req, res) => {
+      try {
+        // 1. Total Paid Amount
+        const totalResult = await paymentsCollection
+          .aggregate([
+            { $match: { paymentStatus: "paid" } },
+            {
+              $group: {
+                _id: null,
+                totalPaid: {
+                  $sum: {
+                    $toDouble: {
+                      $substrBytes: ["$price", 1, -1],
+                    },
+                  },
+                },
+              },
+            },
+          ])
+          .toArray();
+
+        const totalPaid = totalResult[0]?.totalPaid || 0;
+
+        // 2. Last 6 Paid Transactions
+        const last6Transactions = await paymentsCollection
+          .find({ paymentStatus: "paid" })
+          .sort({ paidAt: -1 })
+          .limit(6)
+          .toArray();
+
+        res.status(200).json({
+          totalPaid,
+          last6Transactions,
+        });
+      } catch (err) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
     app.post("/create-payment-intent", async (req, res) => {
       try {
         const paymentIntent = await stripe.paymentIntents.create({
