@@ -775,6 +775,46 @@ async function run() {
       }
     });
 
+    // Get Payment history
+    app.get("/users/paymentData/:id", async (req, res) => {
+      const paymentId = req.params.id;
+
+      try {
+        const result = await usersCollection
+          .aggregate([
+            {
+              $match: {
+                "activityLog.paymentHistory._id": new ObjectId(paymentId),
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                name: 1,
+                email: 1,
+                payment: {
+                  $filter: {
+                    input: "$activityLog.paymentHistory",
+                    as: "item",
+                    cond: { $eq: ["$$item._id", new ObjectId(paymentId)] },
+                  },
+                },
+              },
+            },
+          ])
+          .toArray();
+
+        console.log(result[0]);
+        if (result.length === 0 || result[0].payment.length === 0) {
+          return res.status(404).json({ message: "Payment entry not found" });
+        }
+
+        res.json(result[0].payment[0]);
+      } catch (error) {
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
     // Update user with trainer book
     app.patch("/users/activity/:email", async (req, res) => {
       const { email } = req.params;
