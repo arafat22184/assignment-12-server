@@ -5,6 +5,9 @@ const cors = require("cors");
 const port = process.env.PORT || 3000;
 require("dotenv").config();
 
+// Stripe
+const stripe = require("stripe")(process.env.STRIPE_SK);
+
 // Cloudinary
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() });
@@ -40,6 +43,7 @@ async function run() {
     const usersCollection = fitForge.collection("users");
     const newslettersCollection = fitForge.collection("newsletters");
     const classesCollection = fitForge.collection("classes");
+    const paymentsCollection = fitForge.collection("payments");
 
     // Get Users
     app.get("/users", async (req, res) => {
@@ -804,7 +808,6 @@ async function run() {
           ])
           .toArray();
 
-        console.log(result[0]);
         if (result.length === 0 || result[0].payment.length === 0) {
           return res.status(404).json({ message: "Payment entry not found" });
         }
@@ -829,6 +832,86 @@ async function run() {
       });
       result.upsertedId = paymentData._id;
       res.send(result);
+    });
+
+    app.patch("/users/payment-status/:paymentId", async (req, res) => {
+      const paymentId = req.params.paymentId;
+
+      try {
+        // 1. Update the payment status in the user document
+        const updateResult = await usersCollection.updateOne(
+          {
+            "activityLog.paymentHistory._id": new ObjectId(paymentId),
+          },
+          {
+            $set: {
+              "activityLog.paymentHistory.$[entry].paymentStatus": "paid",
+            },
+          },
+          {
+            arrayFilters: [{ "entry._id": new ObjectId(paymentId) }],
+          }
+        );
+
+        if (updateResult.modifiedCount !== 1) {
+          return res
+            .status(404)
+            .json({ message: "Payment not found or already updated." });
+        }
+
+        // 2. Retrieve the user and extract the updated payment entry
+        const user = await usersCollection.findOne({
+          "activityLog.paymentHistory._id": new ObjectId(paymentId),
+        });
+
+        if (!user || !user.activityLog?.paymentHistory) {
+          return res
+            .status(404)
+            .json({ message: "User or payment not found." });
+        }
+
+        const paymentEntry = user.activityLog.paymentHistory.find((p) =>
+          p._id.equals(new ObjectId(paymentId))
+        );
+
+        if (!paymentEntry) {
+          return res.status(404).json({ message: "Payment entry not found." });
+        }
+
+        // Optional: Add additional data
+        const paymentData = {
+          ...paymentEntry,
+          userId: user._id,
+          userEmail: user.email,
+          userName: user.name,
+          paidAt: new Date(),
+        };
+
+        // 3. Insert into paymentsCollection
+        const insertResult = await paymentsCollection.insertOne(paymentData);
+
+        res.status(200).json({
+          message: "Payment status updated and saved to paymentsCollection.",
+          insertId: insertResult.insertedId,
+        });
+      } catch (error) {
+        console.error("Error updating payment status:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    app.post("/create-payment-intent", async (req, res) => {
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: 1000, // amount in cents
+          currency: "usd",
+          payment_method_types: ["card"],
+        });
+
+        res.json({ clientSecret: paymentIntent.client_secret });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
     });
 
     // Send a ping to confirm a successful connection
