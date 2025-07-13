@@ -780,8 +780,6 @@ async function run() {
       const { email } = req.params;
       const paymentData = req.body;
       paymentData._id = new ObjectId();
-      console.log("payment data:", paymentData);
-      console.log("userEmail:", email);
 
       const filter = { email };
       const result = await usersCollection.updateOne(filter, {
@@ -789,6 +787,7 @@ async function run() {
           "activityLog.paymentHistory": paymentData,
         },
       });
+      result.upsertedId = paymentData._id;
       res.send(result);
     });
 
