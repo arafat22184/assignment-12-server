@@ -887,6 +887,7 @@ async function run() {
           paidAt: new Date(),
         };
 
+        // 3. Update trainer's booked slots
         const addPaymentDataInTrainer = await usersCollection.updateOne(
           { _id: new ObjectId(paymentEntry.trainerId) },
           {
@@ -896,15 +897,27 @@ async function run() {
           }
         );
 
-        // 3. Insert into paymentsCollection
+        // 4. Insert into paymentsCollection
         const insertResult = await paymentsCollection.insertOne(paymentData);
+
+        // 5. Update classes collection if classId exists in payment entry
+        if (paymentEntry.classId) {
+          const classUpdateResult = await classesCollection.updateOne(
+            {
+              _id: new ObjectId(paymentEntry.classId),
+              status: "active",
+            },
+            {
+              $addToSet: { membersEnrolled: user._id },
+            }
+          );
+        }
 
         res.status(200).json({
           message: "Payment status updated and saved to paymentsCollection.",
           insertId: insertResult.insertedId,
         });
       } catch (error) {
-        console.error("Error updating payment status:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     });
