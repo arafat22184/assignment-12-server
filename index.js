@@ -878,7 +878,7 @@ async function run() {
           return res.status(404).json({ message: "Payment entry not found." });
         }
 
-        // Optional: Add additional data
+        // Add additional data
         const paymentData = {
           ...paymentEntry,
           userId: user._id,
@@ -886,6 +886,15 @@ async function run() {
           userName: user.name,
           paidAt: new Date(),
         };
+
+        const addPaymentDataInTrainer = await usersCollection.updateOne(
+          { _id: new ObjectId(paymentEntry.trainerId) },
+          {
+            $push: {
+              "activityLog.bookedSlots": paymentData,
+            },
+          }
+        );
 
         // 3. Insert into paymentsCollection
         const insertResult = await paymentsCollection.insertOne(paymentData);
