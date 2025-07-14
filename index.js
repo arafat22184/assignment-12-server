@@ -1106,6 +1106,38 @@ async function run() {
         res.status(500).json({ error: error.message });
       }
     });
+
+    // Get classes by skills:
+    app.get("/classes/by-skills", async (req, res) => {
+      try {
+        const { skills } = req.query;
+
+        // Convert to array (if single skill, wrap it)
+        const skillArray = Array.isArray(skills)
+          ? skills
+          : skills?.split(",").map((s) => s.trim());
+
+        if (!skillArray || skillArray.length === 0) {
+          return res
+            .status(400)
+            .json({ success: false, message: "No skills provided" });
+        }
+
+        const result = await classesCollection
+          .find({ skills: { $in: skillArray } })
+          .toArray();
+
+        res.send({
+          success: true,
+          data: result,
+        });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
+
+      // end
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
