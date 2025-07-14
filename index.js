@@ -44,6 +44,7 @@ async function run() {
     const newslettersCollection = fitForge.collection("newsletters");
     const classesCollection = fitForge.collection("classes");
     const paymentsCollection = fitForge.collection("payments");
+    const reviewsCollection = fitForge.collection("reviews");
 
     // Get Users
     app.get("/users", async (req, res) => {
@@ -104,7 +105,6 @@ async function run() {
               const result = await streamUpload();
               finalImageUrl = result.secure_url;
             } catch (error) {
-              console.error("Cloudinary upload error:", error);
               return res.status(500).json({
                 success: false,
                 message: "Image upload failed. Please try a different image.",
@@ -142,7 +142,6 @@ async function run() {
 
           res.status(200).json(responseData);
         } catch (error) {
-          console.error("Error updating user profile:", error);
           res.status(500).json({
             success: false,
             message: "Internal server error. Please try again later.",
@@ -966,6 +965,7 @@ async function run() {
       res.send(result);
     });
 
+    // Update payment status
     app.patch("/users/payment-status/:paymentId", async (req, res) => {
       const paymentId = req.params.paymentId;
 
@@ -1033,7 +1033,7 @@ async function run() {
         const insertResult = await paymentsCollection.insertOne(paymentData);
 
         // 5. Update classes collection if classId exists in payment entry
-        if (paymentEntry.classId) {
+        if (!paymentEntry.classId) {
           const classUpdateResult = await classesCollection.updateOne(
             {
               _id: new ObjectId(paymentEntry.classId),
@@ -1132,12 +1132,24 @@ async function run() {
           data: result,
         });
       } catch (err) {
-        console.error(err);
         res.status(500).json({ success: false, message: "Server error" });
       }
 
       // end
     });
+
+    // Get All reviews
+    app.get("/reviews", async (req, res) => {
+      const { email } = req.query;
+      let query = {};
+      if (email) {
+        query = { email };
+      }
+      const result = await reviewsCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // end
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
