@@ -57,6 +57,101 @@ async function run() {
       res.send(result);
     });
 
+    // Update Profile By member only updates name and profile picture
+    app.patch(
+      "/users/profileUpdate",
+      upload.single("imageFile"),
+      async (req, res) => {
+        try {
+          const { email } = req.query;
+          let name = req.body.name; // Now optional
+          let finalImageUrl = null;
+
+          // Validate email
+          if (!email) {
+            return res.status(400).json({
+              success: false,
+              message: "Email is required",
+            });
+          }
+
+          // Check if at least one field is being updated
+          if (!name && !req.file) {
+            return res.status(400).json({
+              success: false,
+              message:
+                "At least one field (name or image) is required for update",
+            });
+          }
+
+          // Handle image upload if file exists
+          if (req.file) {
+            try {
+              const streamUpload = () =>
+                new Promise((resolve, reject) => {
+                  const stream = cloudinary.uploader.upload_stream(
+                    {
+                      folder: "fitForge",
+                    },
+                    (error, result) => {
+                      if (result) resolve(result);
+                      else reject(error);
+                    }
+                  );
+                  streamifier.createReadStream(req.file.buffer).pipe(stream);
+                });
+
+              const result = await streamUpload();
+              finalImageUrl = result.secure_url;
+            } catch (error) {
+              console.error("Cloudinary upload error:", error);
+              return res.status(500).json({
+                success: false,
+                message: "Image upload failed. Please try a different image.",
+              });
+            }
+          }
+
+          // Prepare update object - only name and photoURL
+          const updateData = {};
+          if (name) updateData.name = name;
+          if (finalImageUrl) updateData.photoURL = finalImageUrl;
+
+          // Update user in MongoDB - only name and photoURL
+          const result = await usersCollection.updateOne(
+            { email },
+            { $set: updateData }
+          );
+
+          if (result.matchedCount === 0) {
+            return res.status(404).json({
+              success: false,
+              message: "User not found",
+            });
+          }
+
+          // Only return the updated fields in the response
+          const responseData = {
+            success: true,
+            message: "Profile updated successfully",
+          };
+
+          // Add updated fields to response if they were updated
+          if (name) responseData.updatedName = name;
+          if (finalImageUrl) responseData.updatedPhotoURL = finalImageUrl;
+
+          res.status(200).json(responseData);
+        } catch (error) {
+          console.error("Error updating user profile:", error);
+          res.status(500).json({
+            success: false,
+            message: "Internal server error. Please try again later.",
+            error: error.message,
+          });
+        }
+      }
+    );
+
     // Get All Trainer users
     app.get("/users/trainers", async (req, res) => {
       const result = await usersCollection
@@ -317,27 +412,6 @@ async function run() {
       }
     });
 
-    // GET: Get user role by email
-    app.get("/users/:email/role", async (req, res) => {
-      try {
-        const email = req.params.email;
-
-        if (!email) {
-          return res.status(400).send({ message: "Email is required" });
-        }
-
-        const user = await usersCollection.findOne({ email });
-
-        if (!user) {
-          return res.status(404).send({ message: "User not found" });
-        }
-
-        res.send({ role: user.role || "member" });
-      } catch (error) {
-        res.status(500).send({ message: "Failed to get role" });
-      }
-    });
-
     // Email Register User store
     app.post("/users", upload.single("imageFile"), async (req, res) => {
       try {
@@ -383,6 +457,27 @@ async function run() {
         res.send(result);
       } catch (err) {
         res.status(500).json({ error: "User upload failed." });
+      }
+    });
+
+    // GET: Get user role by email
+    app.get("/users/role/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        if (!email) {
+          return res.status(400).send({ message: "Email is required" });
+        }
+
+        const user = await usersCollection.findOne({ email });
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send({ role: user.role || "member" });
+      } catch (error) {
+        res.status(500).send({ message: "Failed to get role" });
       }
     });
 
@@ -509,41 +604,6 @@ async function run() {
       res.send(result);
     });
 
-    // Email Login User Login Time Update
-    app.patch("/users/:email", async (req, res) => {
-      try {
-        const email = req.params.email;
-        const { lastLogin } = req.body;
-
-        if (!email || !lastLogin) {
-          return res
-            .status(400)
-            .json({ message: "Email and lastLogin are required." });
-        }
-
-        const filter = { email: email };
-        const updateDoc = {
-          $set: {
-            "activityLog.lastLogin": new Date(lastLogin),
-          },
-        };
-
-        const result = await usersCollection.updateOne(filter, updateDoc);
-
-        if (result.modifiedCount === 1) {
-          res
-            .status(200)
-            .json({ message: "Last login time updated successfully." });
-        } else {
-          res
-            .status(404)
-            .json({ message: "User not found or already up to date." });
-        }
-      } catch (error) {
-        res.status(500).json({ message: "Internal server error." });
-      }
-    });
-
     // Google Github user data store
     app.post("/users/social", async (req, res) => {
       try {
@@ -584,6 +644,41 @@ async function run() {
         res.status(201).json({ message: "User created", result });
       } catch (err) {
         res.status(500).json({ error: "Failed to handle Google login." });
+      }
+    });
+
+    // Email Login User Login Time Update
+    app.patch("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const { lastLogin } = req.body;
+
+        if (!email || !lastLogin) {
+          return res
+            .status(400)
+            .json({ message: "Email and lastLogin are required." });
+        }
+
+        const filter = { email: email };
+        const updateDoc = {
+          $set: {
+            "activityLog.lastLogin": new Date(lastLogin),
+          },
+        };
+
+        const result = await usersCollection.updateOne(filter, updateDoc);
+
+        if (result.modifiedCount === 1) {
+          res
+            .status(200)
+            .json({ message: "Last login time updated successfully." });
+        } else {
+          res
+            .status(404)
+            .json({ message: "User not found or already up to date." });
+        }
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error." });
       }
     });
 
