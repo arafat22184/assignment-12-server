@@ -60,6 +60,16 @@ async function run() {
       res.send(result);
     });
 
+    // Top 3 trainers get method
+    app.get("/users/top-trainers", async (req, res) => {
+      result = await usersCollection
+        .find({ role: "trainer" })
+        .sort({ "trainerApplication.experience": -1 })
+        .limit(3)
+        .toArray();
+      res.send(result);
+    });
+
     // Get All Trainer Applications
     app.get("/users/trainer-applications", async (req, res) => {
       try {
