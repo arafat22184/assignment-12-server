@@ -51,6 +51,12 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/users/activity", async (req, res) => {
+      const { email } = req.query;
+      const result = await usersCollection.findOne({ email: email });
+      res.send(result);
+    });
+
     // Get All Trainer users
     app.get("/users/trainers", async (req, res) => {
       const result = await usersCollection
@@ -220,7 +226,6 @@ async function run() {
 
         res.send(trainers);
       } catch (error) {
-        console.error(error);
         res.status(500).send({ message: "Failed to fetch trainers" });
       }
     });
@@ -250,7 +255,6 @@ async function run() {
           data: updatedUser,
         });
       } catch (error) {
-        console.error("Error deleting trainer application:", error);
         res.status(500).json({
           success: false,
           message: "Failed to delete trainer application",
@@ -305,7 +309,6 @@ async function run() {
           });
         }
       } catch (error) {
-        console.error("Error demoting trainer:", error);
         res.status(500).json({
           success: false,
           message: "Internal server error",
@@ -489,7 +492,6 @@ async function run() {
             message: "Trainer application submitted successfully",
           });
         } catch (error) {
-          console.error("Error submitting trainer application:", error);
           res.status(500).json({
             success: false,
             message: "Failed to submit trainer application",
@@ -538,7 +540,6 @@ async function run() {
             .json({ message: "User not found or already up to date." });
         }
       } catch (error) {
-        console.error("Error updating lastLogin:", error);
         res.status(500).json({ message: "Internal server error." });
       }
     });
@@ -582,7 +583,6 @@ async function run() {
         const result = await usersCollection.insertOne(userData);
         res.status(201).json({ message: "User created", result });
       } catch (err) {
-        console.error("Google User insert error:", err);
         res.status(500).json({ error: "Failed to handle Google login." });
       }
     });
@@ -622,7 +622,6 @@ async function run() {
           .toArray();
         res.status(200).json(classes);
       } catch (error) {
-        console.error("Error fetching all classes:", error);
         res.status(500).json({
           success: false,
           message: "Failed to fetch classes",
@@ -675,7 +674,6 @@ async function run() {
           },
         });
       } catch (error) {
-        console.error("Error fetching classes:", error);
         res.status(500).json({
           success: false,
           message: "Failed to fetch classes",
@@ -705,7 +703,6 @@ async function run() {
           data: featuredClasses,
         });
       } catch (error) {
-        console.error("Error fetching featured classes:", error);
         res.status(500).json({
           success: false,
           message: "Failed to fetch featured classes",
@@ -1014,12 +1011,6 @@ async function run() {
         res.status(500).json({ error: error.message });
       }
     });
-
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
