@@ -673,6 +673,36 @@ async function run() {
       }
     });
 
+    // Get featured classes (top 6 by enrollment)
+    app.get("/classes/featured", async (req, res) => {
+      try {
+        // Find active classes, sort by membersEnrolled array length (descending), limit to 6
+        const featuredClasses = await classesCollection
+          .aggregate([
+            { $match: { status: "active" } },
+            {
+              $addFields: {
+                enrollmentCount: { $size: "$membersEnrolled" },
+              },
+            },
+            { $sort: { enrollmentCount: -1 } },
+            { $limit: 6 },
+          ])
+          .toArray();
+
+        res.json({
+          success: true,
+          data: featuredClasses,
+        });
+      } catch (error) {
+        console.error("Error fetching featured classes:", error);
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch featured classes",
+        });
+      }
+    });
+
     // POST: Create a new fitness class with image upload
     app.post("/classes", upload.single("image"), async (req, res) => {
       try {
