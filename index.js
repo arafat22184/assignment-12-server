@@ -1166,8 +1166,6 @@ async function run() {
 
     // Delete slot and Booking details by trainer.
     // DELETE /delete-slot endpoint
-    const { ObjectId } = require("mongodb");
-
     app.delete("/delete-slot", async (req, res) => {
       try {
         const { trainerId, slot, deleteType, bookingId, userId } = req.body;
