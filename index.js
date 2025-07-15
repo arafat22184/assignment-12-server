@@ -1142,10 +1142,28 @@ async function run() {
     app.get("/reviews", async (req, res) => {
       const { email } = req.query;
       let query = {};
+
       if (email) {
-        query = { email };
+        query.email = email;
       }
-      const result = await reviewsCollection.find(query).toArray();
+
+      try {
+        const result = await reviewsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error("Failed to fetch reviews:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    // Post Reviews
+    app.post("/reviews", async (req, res) => {
+      const reviewData = req.body;
+      const result = await reviewsCollection.insertOne(reviewData);
       res.send(result);
     });
 
