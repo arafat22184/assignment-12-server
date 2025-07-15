@@ -1306,6 +1306,73 @@ async function run() {
       }
     });
 
+    // Add Slot by Trainer:
+    app.patch("/trainers/add-slots", async (req, res) => {
+      try {
+        const { trainerId, slots } = req.body;
+
+        if (!trainerId || !slots || !Array.isArray(slots)) {
+          return res.status(400).json({
+            success: false,
+            message: "Missing required fields",
+          });
+        }
+
+        const trainerObjectId = new ObjectId(trainerId);
+        const trainer = await usersCollection.findOne({ _id: trainerObjectId });
+
+        if (!trainer) {
+          return res.status(404).json({
+            success: false,
+            message: "Trainer not found",
+          });
+        }
+
+        // Get existing slots for duplicate check
+        const existingSlots = trainer.trainerApplication.slots || [];
+        const existingSlotsSet = new Set(
+          existingSlots.map((slot) => `${slot.day}-${slot.time}`)
+        );
+
+        // Filter out duplicates
+        const newSlotsToAdd = slots.filter(
+          (slot) => !existingSlotsSet.has(`${slot.day}-${slot.time}`)
+        );
+
+        if (newSlotsToAdd.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "All selected slots already exist",
+          });
+        }
+
+        // Add the new slots
+        const result = await usersCollection.updateOne(
+          { _id: trainerObjectId },
+          { $push: { "trainerApplication.slots": { $each: newSlotsToAdd } } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "No slots were added",
+          });
+        }
+
+        res.json({
+          success: true,
+          message: `${newSlotsToAdd.length} slot(s) added successfully`,
+        });
+      } catch (error) {
+        console.error("Add slots error:", error);
+        res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: error.message,
+        });
+      }
+    });
+
     // end
   } finally {
     // Ensures that the client will close when you finish/error
