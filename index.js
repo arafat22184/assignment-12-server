@@ -493,8 +493,7 @@ async function run() {
             experience,
             certifications,
             skills,
-            availableDays,
-            availableTimeSlots,
+            slots,
             facebook,
             instagram,
             linkedin,
@@ -508,8 +507,7 @@ async function run() {
             !experience ||
             !certifications ||
             !skills ||
-            !availableDays ||
-            !availableTimeSlots
+            !slots
           ) {
             return res.status(400).json({
               success: false,
@@ -524,8 +522,7 @@ async function run() {
               experience,
               certifications,
               skills: JSON.parse(skills),
-              availableDays: JSON.parse(availableDays),
-              availableTimeSlots: JSON.parse(availableTimeSlots),
+              slots: JSON.parse(slots),
               status: "pending",
               createdAt: new Date(),
               updatedAt: new Date(),
