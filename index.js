@@ -1164,6 +1164,150 @@ async function run() {
       res.send(result);
     });
 
+    // Delete slot and Booking details by trainer.
+    // DELETE /delete-slot endpoint
+    const { ObjectId } = require("mongodb");
+
+    app.delete("/delete-slot", async (req, res) => {
+      try {
+        const { trainerId, slot, deleteType, bookingId, userId } = req.body;
+
+        // Validate required fields
+        if (!trainerId || !slot || !deleteType) {
+          return res.status(400).json({
+            success: false,
+            message: "Missing required fields",
+          });
+        }
+
+        // Convert trainerId to ObjectId immediately
+        let trainerObjectId;
+        try {
+          trainerObjectId = new ObjectId(trainerId);
+        } catch (err) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid trainer ID format",
+          });
+        }
+
+        if (deleteType === "slot") {
+          // Existing slot deletion logic remains the same
+          const slotPullResult = await usersCollection.updateOne(
+            { _id: trainerObjectId },
+            { $pull: { "trainerApplication.slots": slot } }
+          );
+
+          const trainer = await usersCollection.findOne({
+            _id: trainerObjectId,
+          });
+
+          const matchingBookings =
+            trainer?.activityLog?.bookedSlots?.filter(
+              (b) => b.slot.day === slot.day && b.slot.time === slot.time
+            ) || [];
+
+          for (const booking of matchingBookings) {
+            await usersCollection.updateOne(
+              { _id: new ObjectId(booking.userId) },
+              { $pull: { "activityLog.paymentHistory": { _id: booking._id } } }
+            );
+          }
+
+          await usersCollection.updateOne(
+            { _id: trainerObjectId },
+            {
+              $pull: {
+                "activityLog.bookedSlots": {
+                  "slot.day": slot.day,
+                  "slot.time": slot.time,
+                },
+              },
+            }
+          );
+
+          return res.json({
+            success: true,
+            message: `Slot and ${matchingBookings.length} related bookings deleted`,
+          });
+        } else if (deleteType === "booking") {
+          // Validate booking deletion params
+          if (!bookingId || !userId) {
+            return res.status(400).json({
+              success: false,
+              message: "Missing bookingId or userId for booking deletion",
+            });
+          }
+
+          // Convert all IDs to ObjectIDs
+          let userObjectId, bookingObjectId;
+          try {
+            userObjectId = new ObjectId(userId);
+            bookingObjectId = new ObjectId(bookingId);
+          } catch (err) {
+            return res.status(400).json({
+              success: false,
+              message: "Invalid ID format: " + err.message,
+            });
+          }
+
+          // 1. Remove booking from trainer using converted ObjectID
+          const trainerUpdate = await usersCollection.updateOne(
+            { _id: trainerObjectId },
+            { $pull: { "activityLog.bookedSlots": { _id: bookingObjectId } } }
+          );
+
+          // 2. Remove payment from user using converted ObjectID
+          const userUpdate = await usersCollection.updateOne(
+            { _id: userObjectId },
+            {
+              $pull: { "activityLog.paymentHistory": { _id: bookingObjectId } },
+            }
+          );
+
+          // Verify updates with detailed error messages
+          let errorMsg = "";
+          if (trainerUpdate.modifiedCount === 0) {
+            errorMsg += "Booking not found in trainer's slots. ";
+          }
+          if (userUpdate.modifiedCount === 0) {
+            errorMsg += "Payment record not found in user's history.";
+          }
+
+          if (errorMsg) {
+            return res.status(404).json({
+              success: false,
+              message: "Failed to delete booking: " + errorMsg,
+              details: {
+                trainerId: trainerId,
+                bookingId: bookingId,
+                userId: userId,
+              },
+            });
+          }
+
+          return res.json({
+            success: true,
+            message: "Booking deleted successfully",
+          });
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid deleteType",
+          });
+        }
+      } catch (error) {
+        console.error("Delete slot error:", error);
+        res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: error.message,
+          stack:
+            process.env.NODE_ENV === "development" ? error.stack : undefined,
+        });
+      }
+    });
+
     // end
   } finally {
     // Ensures that the client will close when you finish/error
@@ -1177,5 +1321,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Blogify running on port http://localhost:${port}`);
+  console.log(`FitForge running on port http://localhost:${port}`);
 });
