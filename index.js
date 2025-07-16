@@ -1370,37 +1370,32 @@ async function run() {
       }
     });
 
-    // Get all Forums/Single Forums
+    // forums get method with pagination
     app.get("/forums", async (req, res) => {
       try {
-        const { id } = req.query;
+        const { page = 1, limit = 6 } = req.query;
 
-        if (id) {
-          // Validate ObjectId format
-          if (!ObjectId.isValid(id)) {
-            return res.status(400).json({
-              success: false,
-              message: "Invalid forum ID",
-            });
-          }
+        // Pagination logic
+        const skip = (page - 1) * limit;
+        const [forums, total] = await Promise.all([
+          forumsCollection
+            .find({})
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit))
+            .toArray(),
+          forumsCollection.countDocuments({}),
+        ]);
 
-          const forum = await forumsCollection.findOne({
-            _id: new ObjectId(id),
-          });
-
-          if (!forum) {
-            return res.status(404).json({
-              success: false,
-              message: "Forum not found",
-            });
-          }
-
-          return res.status(200).json(forum);
-        }
-
-        // No ID provided, return all forums
-        const forums = await forumsCollection.find({}).toArray();
-        res.status(200).json(forums);
+        res.status(200).json({
+          success: true,
+          data: forums,
+          pagination: {
+            total,
+            page: parseInt(page),
+            pages: Math.ceil(total / limit),
+          },
+        });
       } catch (error) {
         res.status(500).json({
           success: false,
