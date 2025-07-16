@@ -39,7 +39,6 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-
     const fitForge = client.db("fitForge");
     const usersCollection = fitForge.collection("users");
     const newslettersCollection = fitForge.collection("newsletters");
