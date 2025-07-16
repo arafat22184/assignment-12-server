@@ -313,7 +313,7 @@ async function run() {
         const trainers = await usersCollection
           .find({
             role: "trainer",
-            skills: { $in: classItem.skills },
+            "trainerApplication.skills": { $in: classItem.skills },
           })
           .sort({ createdAt: -1 })
           .toArray();
