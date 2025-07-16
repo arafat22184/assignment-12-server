@@ -1370,38 +1370,109 @@ async function run() {
       }
     });
 
-    // forums get method with pagination
+    // Get forums with pagination
     app.get("/forums", async (req, res) => {
       try {
-        const { page = 1, limit = 6 } = req.query;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 6;
+        const skip = (page - 1) * pageSize;
 
-        // Pagination logic
-        const skip = (page - 1) * limit;
-        const [forums, total] = await Promise.all([
-          forumsCollection
-            .find({})
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(parseInt(limit))
-            .toArray(),
-          forumsCollection.countDocuments({}),
-        ]);
+        const total = await forumsCollection.countDocuments();
+        const forums = await forumsCollection
+          .find()
+          .skip(skip)
+          .limit(pageSize)
+          .toArray();
 
-        res.status(200).json({
+        res.send({ forums, total });
+      } catch (error) {
+        res.status(500).send({ error: "Server error" });
+      }
+    });
+
+    // Get 6 Forums for Homepage
+    app.get("/forums-six", async (req, res) => {
+      const result = await forumsCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .toArray();
+      res.send(result);
+    });
+
+    // Vote endpoint
+    app.patch("/forum/vote/:id", async (req, res) => {
+      try {
+        const forumId = req.params.id;
+        const { voteType, email } = req.body;
+
+        if (!email || !["up", "down"].includes(voteType)) {
+          return res.status(400).send({
+            success: false,
+            message: "Missing or invalid voteType/email",
+          });
+        }
+
+        // 1) Fetch the current document
+        const forum = await forumsCollection.findOne({
+          _id: new ObjectId(forumId),
+        });
+        if (!forum) {
+          return res
+            .status(404)
+            .send({ success: false, message: "Forum not found" });
+        }
+
+        const hasVoted =
+          Array.isArray(forum.likes) && forum.likes.includes(email);
+        let updateOp;
+
+        if (voteType === "up") {
+          if (hasVoted) {
+            return res.status(400).send({
+              success: false,
+              message: "You have already up‑voted this forum.",
+            });
+          }
+          updateOp = { $push: { likes: email } };
+        } else {
+          // voteType === "down"
+          if (!hasVoted) {
+            return res
+              .status(400)
+              .send({ success: false, message: "You haven't up‑voted yet." });
+          }
+          updateOp = { $pull: { likes: email } };
+        }
+
+        // 2) Apply the push/pull
+        const result = await forumsCollection.updateOne(
+          { _id: new ObjectId(forumId) },
+          updateOp
+        );
+
+        if (result.modifiedCount === 0) {
+          // should be rare, but handle it
+          return res
+            .status(500)
+            .send({ success: false, message: "Failed to update votes." });
+        }
+
+        // 3) Return the new total (or full array) if you like:
+        const updated = await forumsCollection.findOne(
+          { _id: new ObjectId(forumId) },
+          { projection: { likes: 1 } }
+        );
+        return res.send({
           success: true,
-          data: forums,
-          pagination: {
-            total,
-            page: parseInt(page),
-            pages: Math.ceil(total / limit),
-          },
+          likesCount: updated.likes.length,
+          likes: updated.likes,
         });
       } catch (error) {
-        res.status(500).json({
-          success: false,
-          message: "Failed to fetch forums",
-          error: error.message,
-        });
+        console.error("Vote error:", error);
+        return res
+          .status(500)
+          .send({ success: false, message: "Server error." });
       }
     });
 
@@ -1463,7 +1534,7 @@ async function run() {
           imageUrl: uploadResult.secure_url,
           imagePublicId: uploadResult.public_id,
           createdAt: new Date(),
-          likes: 0,
+          likes: [],
         };
 
         // 5. Insert into MongoDB
