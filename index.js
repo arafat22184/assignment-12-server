@@ -1400,6 +1400,14 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/forums/:id", async (req, res) => {
+      const { id } = req.params;
+
+      const query = { _id: new ObjectId(id) };
+      const result = await forumsCollection.findOne(query);
+      res.send(result);
+    });
+
     // Vote endpoint
     app.patch("/forum/vote/:id", async (req, res) => {
       try {
