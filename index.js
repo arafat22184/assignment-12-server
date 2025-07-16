@@ -2,6 +2,7 @@ const express = require("express");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 const port = process.env.PORT || 3000;
 require("dotenv").config();
 
@@ -47,17 +48,79 @@ async function run() {
     const reviewsCollection = fitForge.collection("reviews");
     const forumsCollection = fitForge.collection("forums");
 
+    // JWT token related api
+    app.post("/jwt", async (req, res) => {
+      const { email } = req.body;
+      const user = { email };
+      const token = jwt.sign(user, process.env.JWT_SECRET_KEY, {
+        expiresIn: "2h",
+      });
+      res.send({ token, message: "JWT Created Successfully" });
+    });
+
+    const verifyJwtToken = (req, res, next) => {
+      const token = req?.headers?.authorization?.split(" ")[1];
+
+      if (!token) {
+        return res.status(401).send({ message: "Unauthorized Access!" });
+      }
+
+      jwt.verify(token, process.env.JWT_SECRET_KEY, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: "Unauthorized Access!" });
+        }
+        req.decoded = decoded;
+        next();
+      });
+    };
+
+    // Verify User Email
+    const verifyEmail = async (req, res, next) => {
+      if (req.headers.email !== req.decoded.email) {
+        return res.status(403).send({ message: "Forbidden access" });
+      }
+      next();
+    };
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    const verifyTrainer = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "trainer") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
     // Get Users
     app.get("/users", async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
 
-    app.get("/users/activity", async (req, res) => {
-      const { email } = req.query;
-      const result = await usersCollection.findOne({ email: email });
-      res.send(result);
-    });
+    // get user by email
+    app.get(
+      "/users/activity",
+      verifyJwtToken,
+      verifyEmail,
+      async (req, res) => {
+        const { email } = req.query;
+        const result = await usersCollection.findOne({ email: email });
+        res.send(result);
+      }
+    );
 
     // Update Profile By member only updates name and profile picture
     app.patch(
@@ -172,22 +235,28 @@ async function run() {
     });
 
     // Get All Trainer Applications
-    app.get("/users/trainer-applications", async (req, res) => {
-      try {
-        const applications = await usersCollection
-          .find({
-            "trainerApplication.status": "pending",
-          })
-          .toArray();
-        res.status(200).json(applications);
-      } catch (error) {
-        res.status(500).json({
-          success: false,
-          message: "Failed to fetch trainer applications",
-          error: error.message,
-        });
+    app.get(
+      "/users/trainer-applications",
+      verifyJwtToken,
+      verifyEmail,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const applications = await usersCollection
+            .find({
+              "trainerApplication.status": "pending",
+            })
+            .toArray();
+          res.status(200).json(applications);
+        } catch (error) {
+          res.status(500).json({
+            success: false,
+            message: "Failed to fetch trainer applications",
+            error: error.message,
+          });
+        }
       }
-    });
+    );
 
     // Approved Trainer update
     app.patch("/users/approve-trainer/:id", async (req, res) => {
@@ -263,32 +332,38 @@ async function run() {
     });
 
     // Get Applied Trainer details
-    app.get("/users/trainer-application/:id", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const application = await usersCollection.findOne({
-          _id: new ObjectId(id),
-          "trainerApplication.status": "pending",
-        });
+    app.get(
+      "/users/trainer-application/:id",
+      verifyJwtToken,
+      verifyEmail,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const application = await usersCollection.findOne({
+            _id: new ObjectId(id),
+            "trainerApplication.status": "pending",
+          });
 
-        if (!application) {
-          return res.status(404).json({
+          if (!application) {
+            return res.status(404).json({
+              success: false,
+              message: "Application not found",
+            });
+          }
+
+          res.status(200).json(application);
+        } catch (error) {
+          res.status(500).json({
             success: false,
-            message: "Application not found",
+            message: "Failed to fetch application details",
+            error: error.message,
           });
         }
-
-        res.status(200).json(application);
-      } catch (error) {
-        res.status(500).json({
-          success: false,
-          message: "Failed to fetch application details",
-          error: error.message,
-        });
       }
-    });
+    );
 
-    app.get("/trainer/:id", async (req, res) => {
+    app.get("/trainer/:id", verifyJwtToken, verifyEmail, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await usersCollection.findOne(query);
@@ -461,25 +536,30 @@ async function run() {
     });
 
     // GET: Get user role by email
-    app.get("/users/role/:email", async (req, res) => {
-      try {
-        const email = req.params.email;
+    app.get(
+      "/users/role/:email",
+      verifyJwtToken,
+      verifyEmail,
+      async (req, res) => {
+        try {
+          const email = req.params.email;
 
-        if (!email) {
-          return res.status(400).send({ message: "Email is required" });
+          if (!email) {
+            return res.status(400).send({ message: "Email is required" });
+          }
+
+          const user = await usersCollection.findOne({ email });
+
+          if (!user) {
+            return res.status(404).send({ message: "User not found" });
+          }
+
+          res.send({ role: user.role || "member" });
+        } catch (error) {
+          res.status(500).send({ message: "Failed to get role" });
         }
-
-        const user = await usersCollection.findOne({ email });
-
-        if (!user) {
-          return res.status(404).send({ message: "User not found" });
-        }
-
-        res.send({ role: user.role || "member" });
-      } catch (error) {
-        res.status(500).send({ message: "Failed to get role" });
       }
-    });
+    );
 
     // Update user to become a trainer
     app.patch(
@@ -594,7 +674,7 @@ async function run() {
     );
 
     // get user by email
-    app.get("/users/:email", async (req, res) => {
+    app.get("/users/:email", verifyJwtToken, verifyEmail, async (req, res) => {
       const { email } = req.params;
       const query = { email };
       const result = await usersCollection.findOne(query);
@@ -680,10 +760,16 @@ async function run() {
     });
 
     // NewsLetter Get
-    app.get("/newsletter", async (req, res) => {
-      const result = await newslettersCollection.find().toArray();
-      res.send(result);
-    });
+    app.get(
+      "/newsletter",
+      verifyJwtToken,
+      verifyEmail,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await newslettersCollection.find().toArray();
+        res.send(result);
+      }
+    );
 
     // NewsLetter post
     app.post("/newsletter", async (req, res) => {
@@ -908,43 +994,48 @@ async function run() {
     });
 
     // Get Payment history
-    app.get("/users/paymentData/:id", async (req, res) => {
-      const paymentId = req.params.id;
+    app.get(
+      "/users/paymentData/:id",
+      verifyJwtToken,
+      verifyEmail,
+      async (req, res) => {
+        const paymentId = req.params.id;
 
-      try {
-        const result = await usersCollection
-          .aggregate([
-            {
-              $match: {
-                "activityLog.paymentHistory._id": new ObjectId(paymentId),
+        try {
+          const result = await usersCollection
+            .aggregate([
+              {
+                $match: {
+                  "activityLog.paymentHistory._id": new ObjectId(paymentId),
+                },
               },
-            },
-            {
-              $project: {
-                _id: 0,
-                name: 1,
-                email: 1,
-                payment: {
-                  $filter: {
-                    input: "$activityLog.paymentHistory",
-                    as: "item",
-                    cond: { $eq: ["$$item._id", new ObjectId(paymentId)] },
+              {
+                $project: {
+                  _id: 0,
+                  name: 1,
+                  email: 1,
+                  payment: {
+                    $filter: {
+                      input: "$activityLog.paymentHistory",
+                      as: "item",
+                      cond: { $eq: ["$$item._id", new ObjectId(paymentId)] },
+                    },
                   },
                 },
               },
-            },
-          ])
-          .toArray();
+            ])
+            .toArray();
 
-        if (result.length === 0 || result[0].payment.length === 0) {
-          return res.status(404).json({ message: "Payment entry not found" });
+          if (result.length === 0 || result[0].payment.length === 0) {
+            return res.status(404).json({ message: "Payment entry not found" });
+          }
+
+          res.json(result[0].payment[0]);
+        } catch (error) {
+          res.status(500).json({ message: "Server error" });
         }
-
-        res.json(result[0].payment[0]);
-      } catch (error) {
-        res.status(500).json({ message: "Server error" });
       }
-    });
+    );
 
     // Update user with trainer book
     app.patch("/users/activity/:email", async (req, res) => {
@@ -1051,44 +1142,51 @@ async function run() {
       }
     });
 
-    app.get("/admin/payment-summary", async (req, res) => {
-      try {
-        // 1. Total Paid Amount
-        const totalResult = await paymentsCollection
-          .aggregate([
-            { $match: { paymentStatus: "paid" } },
-            {
-              $group: {
-                _id: null,
-                totalPaid: {
-                  $sum: {
-                    $toDouble: {
-                      $substrBytes: ["$price", 1, -1],
+    // Only for admin payment summary
+    app.get(
+      "/admin/payment-summary",
+      verifyJwtToken,
+      verifyEmail,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          // 1. Total Paid Amount
+          const totalResult = await paymentsCollection
+            .aggregate([
+              { $match: { paymentStatus: "paid" } },
+              {
+                $group: {
+                  _id: null,
+                  totalPaid: {
+                    $sum: {
+                      $toDouble: {
+                        $substrBytes: ["$price", 1, -1],
+                      },
                     },
                   },
                 },
               },
-            },
-          ])
-          .toArray();
+            ])
+            .toArray();
 
-        const totalPaid = totalResult[0]?.totalPaid || 0;
+          const totalPaid = totalResult[0]?.totalPaid || 0;
 
-        // 2. Last 6 Paid Transactions
-        const last6Transactions = await paymentsCollection
-          .find({ paymentStatus: "paid" })
-          .sort({ paidAt: -1 })
-          .limit(6)
-          .toArray();
+          // 2. Last 6 Paid Transactions
+          const last6Transactions = await paymentsCollection
+            .find({ paymentStatus: "paid" })
+            .sort({ paidAt: -1 })
+            .limit(6)
+            .toArray();
 
-        res.status(200).json({
-          totalPaid,
-          last6Transactions,
-        });
-      } catch (err) {
-        res.status(500).json({ message: "Internal server error" });
+          res.status(200).json({
+            totalPaid,
+            last6Transactions,
+          });
+        } catch (err) {
+          res.status(500).json({ message: "Internal server error" });
+        }
       }
-    });
+    );
 
     app.post("/create-payment-intent", async (req, res) => {
       try {
@@ -1105,35 +1203,40 @@ async function run() {
     });
 
     // Get classes by skills:
-    app.get("/classes/by-skills", async (req, res) => {
-      try {
-        const { skills } = req.query;
+    app.get(
+      "/classes/by-skills",
+      verifyJwtToken,
+      verifyEmail,
+      async (req, res) => {
+        try {
+          const { skills } = req.query;
 
-        // Convert to array (if single skill, wrap it)
-        const skillArray = Array.isArray(skills)
-          ? skills
-          : skills?.split(",").map((s) => s.trim());
+          // Convert to array (if single skill, wrap it)
+          const skillArray = Array.isArray(skills)
+            ? skills
+            : skills?.split(",").map((s) => s.trim());
 
-        if (!skillArray || skillArray.length === 0) {
-          return res
-            .status(400)
-            .json({ success: false, message: "No skills provided" });
+          if (!skillArray || skillArray.length === 0) {
+            return res
+              .status(400)
+              .json({ success: false, message: "No skills provided" });
+          }
+
+          const result = await classesCollection
+            .find({ skills: { $in: skillArray } })
+            .toArray();
+
+          res.send({
+            success: true,
+            data: result,
+          });
+        } catch (err) {
+          res.status(500).json({ success: false, message: "Server error" });
         }
 
-        const result = await classesCollection
-          .find({ skills: { $in: skillArray } })
-          .toArray();
-
-        res.send({
-          success: true,
-          data: result,
-        });
-      } catch (err) {
-        res.status(500).json({ success: false, message: "Server error" });
+        // end
       }
-
-      // end
-    });
+    );
 
     // Get All reviews
     app.get("/reviews", async (req, res) => {
@@ -1401,7 +1504,7 @@ async function run() {
     });
 
     // Get single forum data
-    app.get("/forums/:id", async (req, res) => {
+    app.get("/forums/:id", verifyJwtToken, verifyEmail, async (req, res) => {
       const { id } = req.params;
 
       const query = { _id: new ObjectId(id) };
