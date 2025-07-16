@@ -1370,6 +1370,46 @@ async function run() {
       }
     });
 
+    // Get all Forums/Single Forums
+    app.get("/forums", async (req, res) => {
+      try {
+        const { id } = req.query;
+
+        if (id) {
+          // Validate ObjectId format
+          if (!ObjectId.isValid(id)) {
+            return res.status(400).json({
+              success: false,
+              message: "Invalid forum ID",
+            });
+          }
+
+          const forum = await forumsCollection.findOne({
+            _id: new ObjectId(id),
+          });
+
+          if (!forum) {
+            return res.status(404).json({
+              success: false,
+              message: "Forum not found",
+            });
+          }
+
+          return res.status(200).json(forum);
+        }
+
+        // No ID provided, return all forums
+        const forums = await forumsCollection.find({}).toArray();
+        res.status(200).json(forums);
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch forums",
+          error: error.message,
+        });
+      }
+    });
+
     // Add Forums
     app.post("/forums", upload.single("image"), async (req, res) => {
       try {
