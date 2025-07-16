@@ -45,6 +45,7 @@ async function run() {
     const classesCollection = fitForge.collection("classes");
     const paymentsCollection = fitForge.collection("payments");
     const reviewsCollection = fitForge.collection("reviews");
+    const forumsCollection = fitForge.collection("forums");
 
     // Get Users
     app.get("/users", async (req, res) => {
@@ -857,7 +858,6 @@ async function run() {
             const stream = cloudinary.uploader.upload_stream(
               {
                 folder: "fitForge/classes",
-                transformation: { width: 800, height: 600, crop: "limit" },
               },
               (error, result) => {
                 if (result) resolve(result);
@@ -1152,7 +1152,6 @@ async function run() {
 
         res.send(result);
       } catch (error) {
-        console.error("Failed to fetch reviews:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     });
@@ -1295,7 +1294,6 @@ async function run() {
           });
         }
       } catch (error) {
-        console.error("Delete slot error:", error);
         res.status(500).json({
           success: false,
           message: "Internal server error",
@@ -1364,10 +1362,89 @@ async function run() {
           message: `${newSlotsToAdd.length} slot(s) added successfully`,
         });
       } catch (error) {
-        console.error("Add slots error:", error);
         res.status(500).json({
           success: false,
           message: "Internal server error",
+          error: error.message,
+        });
+      }
+    });
+
+    // Add Forums
+    app.post("/forums", upload.single("image"), async (req, res) => {
+      try {
+        // 1. Validate required text fields
+        const { userName, userPhotoURL, role, forumTitle, forumDescription } =
+          req.body;
+
+        const required = {
+          userName,
+          userPhotoURL,
+          role,
+          forumTitle,
+          forumDescription,
+        };
+        for (const [field, value] of Object.entries(required)) {
+          if (!value) {
+            return res.status(400).json({
+              success: false,
+              message: `${field} is required`,
+            });
+          }
+        }
+
+        // 2. Ensure image was uploaded
+        if (!req.file) {
+          return res.status(400).json({
+            success: false,
+            message: "Forum image is required",
+          });
+        }
+
+        // 3. Upload image to Cloudinary
+        const streamUpload = () =>
+          new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              {
+                folder: "fitForge/forums",
+              },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            streamifier.createReadStream(req.file.buffer).pipe(stream);
+          });
+
+        const uploadResult = await streamUpload();
+
+        // 4. Build forum document
+        const newForum = {
+          userName,
+          userPhotoURL,
+          role,
+          forumTitle,
+          forumDescription,
+          imageUrl: uploadResult.secure_url,
+          imagePublicId: uploadResult.public_id,
+          createdAt: new Date(),
+          likes: 0,
+        };
+
+        // 5. Insert into MongoDB
+        const result = await forumsCollection.insertOne(newForum);
+
+        res.status(201).json({
+          success: true,
+          message: "Forum post created successfully",
+          data: {
+            insertedId: result.insertedId,
+          },
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to create forum",
           error: error.message,
         });
       }
