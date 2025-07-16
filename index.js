@@ -1400,6 +1400,7 @@ async function run() {
       res.send(result);
     });
 
+    // Get single forum data
     app.get("/forums/:id", async (req, res) => {
       const { id } = req.params;
 
