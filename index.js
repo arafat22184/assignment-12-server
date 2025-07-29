@@ -20,7 +20,7 @@ app.use(express.json());
 app.use(
   cors({
     origin: "https://job-finder-891d0.web.app",
-    methods: ["GET", "POST", "PATCH", "DELETE"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
@@ -1120,7 +1120,7 @@ async function run() {
         const insertResult = await paymentsCollection.insertOne(paymentData);
 
         // 5. Update classes collection if classId exists in payment entry
-        if (!paymentEntry.classId) {
+        if (paymentEntry.classId) {
           const classUpdateResult = await classesCollection.updateOne(
             {
               _id: new ObjectId(paymentEntry.classId),
