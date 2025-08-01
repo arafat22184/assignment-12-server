@@ -19,7 +19,7 @@ const streamifier = require("streamifier");
 app.use(express.json());
 app.use(
   cors({
-    origin: "https://job-finder-891d0.web.app",
+    origin: ["https://job-finder-891d0.web.app", "http://localhost:5173"],
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   })
