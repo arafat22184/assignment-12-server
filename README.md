@@ -8,6 +8,8 @@
 
 The backend server for **FitForge** — a fitness platform connecting trainers with members. This server handles user management, class bookings, payments, trainer applications, and community forums.
 
+**🔗 Live Website:** [https://fitforge-8d026.web.app/](https://fitforge-8d026.web.app/)
+
 ---
 
 ## 🚀 Features
@@ -99,7 +101,7 @@ cd assignment-12-server
 npm install
 
 # Start the development server
-npm start
+nodemon index.js
 ```
 
 The server will run at: [http://localhost:3000](http://localhost:3000)
